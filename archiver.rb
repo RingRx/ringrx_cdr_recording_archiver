@@ -34,14 +34,15 @@ require 'fileutils'
     logfile = "logs/#{@conffile['logfile']}"
     logfilerotation = (@conffile['logfilerotation']).to_s
 
+    @write_cdrs = @conffile['write_cdrs_to_file']
+    @write_recs = @conffile['download_recordings']
+
     $LOG = Logger.new(logfile, logfilerotation)
     $LOG.level =  Logger::DEBUG
   end
 
   def auth
-    body = {}
-    body[:username] = @conffile['acct_username']
-    body[:password] = @conffile['acct_password']
+    body = { username: @conffile['acct_username'], password:  @conffile['acct_password'] }
 
     response = HTTParty.post("#{@conffile['portal_url']}/auth/token",
       body: body.to_json,
@@ -51,17 +52,16 @@ require 'fileutils'
     return response
   end
 
+  ## Helper method returning http headers
   def request_headers(token)
-    headers = {}
-    headers['Content-Type'] = "application/json"
-    headers['Authorization'] = token
-    return headers
+    { 'Content-Type' => "application/json", 'Authorization' => token }
   end
 
+  ## fetch array of CDRs to process
   def fetch_cdrs(token)
     url = "#{@conffile['portal_url']}/cdrs?getAll=true"
     unless File.exists?(File.join('db','cdrids'))
-      start_date = (Time.now - 31557600).strftime("%d-%m-%Y")
+      start_date = (Time.now - 7889400).strftime("%d-%m-%Y")
       end_date = Time.now.strftime("%d-%m-%Y")
       url = "#{@conffile['portal_url']}/cdrs?getAll=true&startDate=#{start_date}&endDate=#{end_date}"
     end  
@@ -72,45 +72,49 @@ require 'fileutils'
     return response
   end
 
-  def fetch_recording(cdrid)
-    url = "#{@conffile['portal_url']}/cdrs/#{cdrid}/recording"
-    response = HTTParty.get(url,
-      :timeout => 10,
-      :headers => request_headers(token),
-      :verify => false )
-    return response
+  ## Returns array of processed call id's 
+  def call_ids
+    dbfile = File.join('db','cdrids')
+    @callids ||= File.open(dbfile, 'r').readlines.map(&:chomp) 
   end
 
-  def file_name(msg)
-    if msg["message_type"] == "message"
-      file_ext = "txt"
-    elsif msg["message_type"] == "fax"
-      file_ext = msg["fax"].split(".").last
-    elsif msg["message_type"] == "voicemail"
-      file_ext = msg["voicemail"].split(".").last
-    end
-    file_str = "#{@conffile['destination_filename']}.#{file_ext}"
-    output = file_str.gsub("{id}", msg["id"]).gsub("{caller}", msg["caller"]).gsub("{called}", msg["called"]).gsub("{created}", msg["created_at"]).gsub(" ", "_").gsub("{mailbox}", msg["mailbox"]).gsub("{type}", msg["message_type"]).gsub(':', '.')
-    return output
-  end
-
+  ## Checks if provided call hash has already been processed returns boolean to process it
   def check_cdr_id(call)
     dbfile = File.join('db','cdrids')
     result = true
     if File.exists?(dbfile)
-      last_id = IO.readlines(dbfile)[-1]
-      $LOG.debug "checking last ID of #{last_id} against call id #{call['id']} #{last_id.to_i >= call['id'].to_i}"
-      if last_id.to_i >= call['id'].to_i
+      $LOG.debug "Checking id #{call['id']}"
+      if call_ids.include?(call['id'])
         result = false
       else
-        File.open(dbfile, 'w') { |f| f.write(call['id']) }
+        File.open(dbfile, 'a') { |f| f.write("#{call['id']}\n") }
       end
     else
-      File.open(dbfile, 'w') { |f| f.write(call['id']) }
+      File.open(dbfile, 'a') { |f| f.write("#{call['id']}\n") }
     end
     return result
   end
 
+  ## Returns array of processed recording call ids 
+  def recorded_ids
+    dbfile = File.join('db','recorded_ids')
+    @recordedids ||= File.open(dbfile, 'r').readlines.map(&:chomp) 
+  end
+
+  ## Checks if procided callID has already had its recording processed
+  def check_recording(call)
+    dbfile = File.join('db','recorded_ids')
+    result = true
+    if File.exists?(dbfile)
+      $LOG.debug "Checking recording id #{call['id']}"
+      if recorded_ids.include?(call['id'])
+        result = false
+      end
+    end
+    return result
+  end
+
+  ##Returns boolean on if CDR bears a recording
   def cdr_recorded?(call)
     recorded = false
     if !call['recording_key'].nil? && call['recording_key'].length > 0
@@ -119,10 +123,12 @@ require 'fileutils'
     return recorded
   end
 
+  ## Helper method for cdr files
   def cdr_filename(call)
     File.join(@conffile['cdrdir'], "#{call['start_time'].split(' ').first}.csv")
   end
 
+  ## Create cdr file if not exists 
   def cdr_file(call)
     file_headers = "id,responsible_party,start_time,hangup_cause,calling_party,called_party,caller_id_number,caller_id_name,duration,bill_duration,direction,mailbox,aleg_holdtime,bleg_holdtime,recorded,tags\n"
     unless File.exists?(cdr_filename(call))
@@ -130,12 +136,14 @@ require 'fileutils'
     end
   end
   
+  ## Writes CDR to recording file
   def write_cdr(call)
     cdr_file(call)
     call_line = "\"#{call['id']}\",\"#{call['responsible_party']}\",\"#{call['start_time']}\",\"#{call['hangup_cause']}\",\"#{call['calling_party']}\",\"#{call['called_party']}\",\"#{call['caller_id_number']}\",\"#{call['caller_id_name']}\",\"#{call['duration']}\",\"#{call['bill_duration']}\",\"#{call['direction']}\",\"#{call['mailbox']}\",\"#{call['aleg_holdtime']}\",\"#{call['bleg_holdtime']}\",\"#{cdr_recorded?(call).to_s}\",\"#{call['tags']}\"\n"
     File.open(cdr_filename(call), 'a') {|f| f.write(call_line) }
   end
 
+  ## Filename generator for recording file given CDR hash
   def file_name(call)
     file_ext = call["recording_key"].gsub('.enc','').split(".").last rescue ''
     file_str = "#{@conffile['destination_filename']}.#{file_ext}"
@@ -159,6 +167,7 @@ require 'fileutils'
     return output
   end
 
+  ## Fetch recording for given CDR
   def fetch_recording(call, token)
     url = "#{@conffile['portal_url']}/cdrs/#{call['id']}/recording"
     response = HTTParty.get(url,
@@ -168,12 +177,15 @@ require 'fileutils'
     return response
   end
 
+  ## Save recording file and update DB if successful
   def save_recording(call, token)
+    dbfile = File.join('db','recorded_ids')
     $LOG.warn "Processing recording for #{call['id']}"
     recording_file = fetch_recording(call, token)
-    $LOG.warn "Retrieved #{recording_file.inspect}"
+    $LOG.warn "Retrieved #{recording_file.code}"
     if recording_file.code == 200
       File.open(File.join(@conffile['destination_dir'], file_name(call)), 'wb') { |f| f.write(recording_file.body) }
+      File.open(dbfile, 'a') { |f| f.write("#{call['id']}\n") }
     end
   end
 
@@ -190,21 +202,20 @@ if auth_resp.code == 200
 end
 
 if @auth_token
-  $LOG.warn "Performing cdr fetch operation"
   $LOG.debug "received auth token. Good to proceed"
-  $LOG.debug "Fetching cdrs"
+  $LOG.warn "Performing cdr fetch operation"
 
   cdrs = fetch_cdrs(@auth_token).parsed_response
   cdrs.sort_by { |c| c['id'] }.each do |cdr|
     if check_cdr_id(cdr)
-      write_cdr(cdr)
-      $LOG.debug cdr
-      if cdr_recorded?(cdr)
-        $LOG.debug "Fetching recording for #{cdr['id']}"
-        save_recording(cdr, @auth_token)
-      end
+      write_cdr(cdr) if @write_cdrs
+      $LOG.debug "writing cdr #{cdr['id']}"
     else
       $LOG.debug "skipping cdr #{cdr['id']}"
+    end
+    if @write_recs && cdr_recorded?(cdr) && check_recording(cdr)
+      $LOG.debug "Fetching recording for #{cdr['id']}"
+      save_recording(cdr, @auth_token)
     end
   end
 else

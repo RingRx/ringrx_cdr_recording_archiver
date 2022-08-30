@@ -4,8 +4,8 @@ cdrdir: cdrs
 destination_dir: calls
 logfilerotation: daily
 logfile: cdr_archiver.log
-acct_username: your_ringrx_username
-acct_password: your_ringrx_password
+acct_username: your_username
+acct_password: your_password
 portal_url: https://portal.ringrx.com
 # Valid tokens for use in naming are
 # {id} - cdr id
@@ -23,7 +23,8 @@ portal_url: https://portal.ringrx.com
 # {bleg_holdtime} - bleg_holdtime
 # {tags} - tags
 destination_filename: '{start_time}_{id}_{calling_party}_{called_party}_{caller_id_name}'
-delete_messages_after_fetch: false
+write_cdrs_to_file: true
+download_recordings: true
 # DEBUG < INFO < WARN < ERROR < FATAL < UNKNOWN
 loglevel: Logger::DEBUG
 

@@ -11,6 +11,7 @@
 /tmp/
 /calls
 /cdrs
+/logs
 /db
 archiver.conf
 
