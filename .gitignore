@@ -9,6 +9,10 @@
 /test/tmp/
 /test/version_tmp/
 /tmp/
+/calls
+/cdrs
+/db
+archiver.conf
 
 # Used by dotenv library to load environment variables.
 # .env

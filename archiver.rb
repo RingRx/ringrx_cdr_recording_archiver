@@ -19,6 +19,9 @@ require 'fileutils'
     dest_dir = @conffile['destination_dir']
     Dir.mkdir(dest_dir) unless Dir.exist?(dest_dir)
 
+    db_dir = "db/"
+    Dir.mkdir(db_dir) unless Dir.exist?(db_dir)
+
     log_dir = "logs/"
     Dir.mkdir(log_dir) unless Dir.exist?(log_dir)
 
@@ -32,7 +35,7 @@ require 'fileutils'
     logfilerotation = (@conffile['logfilerotation']).to_s
 
     $LOG = Logger.new(logfile, logfilerotation)
-    $LOG.level = Logger::WARN
+    $LOG.level =  Logger::DEBUG
   end
 
   def auth
@@ -57,6 +60,11 @@ require 'fileutils'
 
   def fetch_cdrs(token)
     url = "#{@conffile['portal_url']}/cdrs?getAll=true"
+    unless File.exists?(File.join('db','cdrids'))
+      start_date = (Time.now - 31557600).strftime("%d-%m-%Y")
+      end_date = Time.now.strftime("%d-%m-%Y")
+      url = "#{@conffile['portal_url']}/cdrs?getAll=true&startDate=#{start_date}&endDate=#{end_date}"
+    end  
     response = HTTParty.get(url,
       timeout: 10,
       headers: request_headers(token),
@@ -86,49 +94,118 @@ require 'fileutils'
     return output
   end
 
-  def cdr_ids
-    file = File.open(File.join('db', 'cdrids'), 'r')
-    cdrids = file.readlines.map(&:chomp)
-    file.close
-    return cdrids
-  end
-  
-  def cdr_file(cdr)
-    filename = File.join(@conffile['cdrdir'], cdr['start_time'].split(' ').first, ".csv")
-    unless File.exists?(filename)
-      file = File.open(filename, wb)
-      
-    end 
+  def check_cdr_id(call)
+    dbfile = File.join('db','cdrids')
+    result = true
+    if File.exists?(dbfile)
+      last_id = IO.readlines(dbfile)[-1]
+      $LOG.debug "checking last ID of #{last_id} against call id #{call['id']} #{last_id.to_i >= call['id'].to_i}"
+      if last_id.to_i >= call['id'].to_i
+        result = false
+      else
+        File.open(dbfile, 'w') { |f| f.write(call['id']) }
+      end
+    else
+      File.open(dbfile, 'w') { |f| f.write(call['id']) }
+    end
+    return result
   end
 
+  def cdr_recorded?(call)
+    recorded = false
+    if !call['recording_key'].nil? && call['recording_key'].length > 0
+      recorded = true
+    end
+    return recorded
+  end
+
+  def cdr_filename(call)
+    File.join(@conffile['cdrdir'], "#{call['start_time'].split(' ').first}.csv")
+  end
+
+  def cdr_file(call)
+    file_headers = "id,responsible_party,start_time,hangup_cause,calling_party,called_party,caller_id_number,caller_id_name,duration,bill_duration,direction,mailbox,aleg_holdtime,bleg_holdtime,recorded,tags\n"
+    unless File.exists?(cdr_filename(call))
+      File.open(cdr_filename(call), 'a') {|f| f.write(file_headers) }
+    end
+  end
+  
   def write_cdr(call)
-    puts call['start_time'].split(' ').first
+    cdr_file(call)
+    call_line = "\"#{call['id']}\",\"#{call['responsible_party']}\",\"#{call['start_time']}\",\"#{call['hangup_cause']}\",\"#{call['calling_party']}\",\"#{call['called_party']}\",\"#{call['caller_id_number']}\",\"#{call['caller_id_name']}\",\"#{call['duration']}\",\"#{call['bill_duration']}\",\"#{call['direction']}\",\"#{call['mailbox']}\",\"#{call['aleg_holdtime']}\",\"#{call['bleg_holdtime']}\",\"#{cdr_recorded?(call).to_s}\",\"#{call['tags']}\"\n"
+    File.open(cdr_filename(call), 'a') {|f| f.write(call_line) }
+  end
+
+  def file_name(call)
+    file_ext = call["recording_key"].gsub('.enc','').split(".").last rescue ''
+    file_str = "#{@conffile['destination_filename']}.#{file_ext}"
+    output = file_str.gsub("{id}", call['id'])
+    output = output.gsub("{responsible_party}", call['responsible_party']) if call['responsible_party']
+    output = output.gsub("{start_time}", call['start_time'])
+    output = output.gsub("{hangup_cause}", call['hangup_cause']) if call['hangup_cause']
+    output = output.gsub("{calling_party}", call['calling_party']) if call['calling_party']
+    output = output.gsub("{called_party}", call['called_party']) if call['called_party']
+    output = output.gsub("{caller_id_number}", call['caller_id_number']) if call['caller_id_number']
+    output = output.gsub("{caller_id_name}", call['caller_id_name']) if call['caller_id_name']
+    output = output.gsub("{duration}", call['duration']) if call['duration']
+    output = output.gsub("{bill_duration}", call['bill_duration']) if call['bill_duration']
+    output = output.gsub("{direction}", call['direction']) if call['direction']
+    output = output.gsub("{mailbox}", call['mailbox']) if call['mailbox']
+    output = output.gsub("{aleg_holdtime}", call['aleg_holdtime']) if call['aleg_holdtime']
+    output = output.gsub("{bleg_holdtime}", call['bleg_holdtime']) if call['bleg_holdtime']
+    output = output.gsub("{tags}", call['tags'])
+    output = output.gsub(' ', '_')
+    $LOG.debug "Filename will be: #{output}"
+    return output
+  end
+
+  def fetch_recording(call, token)
+    url = "#{@conffile['portal_url']}/cdrs/#{call['id']}/recording"
+    response = HTTParty.get(url,
+      :timeout => 60,
+      :headers => request_headers(token),
+      :verify => false )
+    return response
+  end
+
+  def save_recording(call, token)
+    $LOG.warn "Processing recording for #{call['id']}"
+    recording_file = fetch_recording(call, token)
+    $LOG.warn "Retrieved #{recording_file.inspect}"
+    if recording_file.code == 200
+      File.open(File.join(@conffile['destination_dir'], file_name(call)), 'wb') { |f| f.write(recording_file.body) }
+    end
   end
 
 ####################################################################
 ### Main app logic
 ####################################################################
 
-puts "Starting up"
 init
 auth_resp = auth
 
-puts auth_resp.code
-puts auth_resp['access_token']
-
 if auth_resp.code == 200
-  puts "auth succeeded..setting auth token to #{auth_resp['access_token']}"
+  $LOG.debug "auth succeeded..setting auth token to #{auth_resp['access_token']}"
   @auth_token = auth_resp['access_token']
 end
 
 if @auth_token
   $LOG.warn "Performing cdr fetch operation"
-  puts "received auth token. Good to proceed"
-  puts "Fetching cdrs"
+  $LOG.debug "received auth token. Good to proceed"
+  $LOG.debug "Fetching cdrs"
 
   cdrs = fetch_cdrs(@auth_token).parsed_response
   cdrs.sort_by { |c| c['id'] }.each do |cdr|
-    write_cdr(cdr)
+    if check_cdr_id(cdr)
+      write_cdr(cdr)
+      $LOG.debug cdr
+      if cdr_recorded?(cdr)
+        $LOG.debug "Fetching recording for #{cdr['id']}"
+        save_recording(cdr, @auth_token)
+      end
+    else
+      $LOG.debug "skipping cdr #{cdr['id']}"
+    end
   end
 else
   $LOG.warn "Authentication failed unable to fetch messages"

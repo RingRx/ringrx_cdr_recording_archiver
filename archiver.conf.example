@@ -1,0 +1,29 @@
+#RingRX voicemail/fax downloader config
+tempdir: tmp
+cdrdir: cdrs
+destination_dir: calls
+logfilerotation: daily
+logfile: cdr_archiver.log
+acct_username: your_ringrx_username
+acct_password: your_ringrx_password
+portal_url: https://portal.ringrx.com
+# Valid tokens for use in naming are
+# {id} - cdr id
+# {responsible_party} - Responsible Party
+# {start_time} - Start DateTime
+# {hangup} - Hangup Cause
+# {calling_party} - caller id number
+# {called_party} - called number
+# {caller_id_name} - caller ID name
+# {duration} - duration in seconds
+# {bill_duration} - bill duration in seconds
+# {direction} - call direction
+# {mailbox} - call mailbox if applicable
+# {aleg_holdtime} - aleg_holdtime
+# {bleg_holdtime} - bleg_holdtime
+# {tags} - tags
+destination_filename: '{start_time}_{id}_{calling_party}_{called_party}_{caller_id_name}'
+delete_messages_after_fetch: false
+# DEBUG < INFO < WARN < ERROR < FATAL < UNKNOWN
+loglevel: Logger::DEBUG
+
