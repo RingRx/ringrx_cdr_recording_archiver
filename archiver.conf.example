@@ -1,5 +1,4 @@
 #RingRX voicemail/fax downloader config
-tempdir: tmp
 cdrdir: cdrs
 destination_dir: calls
 logfilerotation: daily
@@ -7,6 +6,10 @@ logfile: cdr_archiver.log
 acct_username: your_username
 acct_password: your_password
 portal_url: https://portal.ringrx.com
+# First run will sync this many days
+initial_sync_days: 180
+# Days to sync each pass
+sync_days: 10
 # Valid tokens for use in naming are
 # {id} - cdr id
 # {responsible_party} - Responsible Party

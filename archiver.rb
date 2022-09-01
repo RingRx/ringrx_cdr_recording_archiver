@@ -16,20 +16,10 @@ require 'fileutils'
   def init
     @conffile = YAML.load_file('./archiver.conf')
 
-    dest_dir = @conffile['destination_dir']
-    Dir.mkdir(dest_dir) unless Dir.exist?(dest_dir)
-
-    db_dir = "db/"
-    Dir.mkdir(db_dir) unless Dir.exist?(db_dir)
-
-    log_dir = "logs/"
-    Dir.mkdir(log_dir) unless Dir.exist?(log_dir)
-
-    cdr_dir = @conffile['cdrdir']
-    Dir.mkdir(cdr_dir) unless Dir.exist?(cdr_dir)
-
-    tmp_dir = @conffile['tempdir']
-    Dir.mkdir(tmp_dir) unless Dir.exist?(tmp_dir)
+    Dir.mkdir(@conffile['destination_dir']) unless Dir.exist?(@conffile['destination_dir'])
+    Dir.mkdir('db/') unless Dir.exist?("db/")
+    Dir.mkdir('logs/') unless Dir.exist?("logs/")
+    Dir.mkdir(@conffile['cdrdir']) unless Dir.exist?(@conffile['cdrdir'])
 
     logfile = "logs/#{@conffile['logfile']}"
     logfilerotation = (@conffile['logfilerotation']).to_s
@@ -39,6 +29,21 @@ require 'fileutils'
 
     $LOG = Logger.new(logfile, logfilerotation)
     $LOG.level =  Logger::DEBUG
+  end
+
+  def init_start_time
+    if File.exist?(File.join('db', 'cdrids'))
+      $LOG.debug "db exists using short interval"
+      t = (Time.now - (@conffile['sync_days'].to_i * 86400)).strftime("%d-%m-%Y")
+    else
+      $LOG.debug "db doesnt exist using long interval"
+      t = (Time.now - (@conffile['initial_sync_days'].to_i * 86400)).strftime("%d-%m-%Y")
+    end
+    return t
+  end
+
+  def init_end_time
+    Time.now.strftime("%d-%m-%Y")
   end
 
   def auth
@@ -59,12 +64,8 @@ require 'fileutils'
 
   ## fetch array of CDRs to process
   def fetch_cdrs(token)
-    url = "#{@conffile['portal_url']}/cdrs?getAll=true"
-    unless File.exists?(File.join('db','cdrids'))
-      start_date = (Time.now - 7889400).strftime("%d-%m-%Y")
-      end_date = Time.now.strftime("%d-%m-%Y")
-      url = "#{@conffile['portal_url']}/cdrs?getAll=true&startDate=#{start_date}&endDate=#{end_date}"
-    end  
+    $LOG.warn "Fetching CDRs from #{init_start_time} to #{init_end_time}"
+    url = "#{@conffile['portal_url']}/cdrs?getAll=true&startDate=#{init_start_time}&endDate=#{init_end_time}"
     response = HTTParty.get(url,
       timeout: 10,
       headers: request_headers(token),
