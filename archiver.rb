@@ -2,7 +2,6 @@
 # frozen_string_literal: true
 
 require 'httparty'
-require 'httmultiparty'
 require 'json'
 require 'yaml'
 require 'logger'
