@@ -72,10 +72,10 @@ require 'fileutils'
     return response
   end
 
-  ## Returns array of processed call id's 
+  ## Returns array of processed call id's
   def call_ids
     dbfile = File.join('db','cdrids')
-    @callids ||= File.open(dbfile, 'r').readlines.map(&:chomp) 
+    @callids ||= File.open(dbfile, 'r').readlines.map(&:chomp)
   end
 
   ## Checks if provided call hash has already been processed returns boolean to process it
@@ -95,10 +95,10 @@ require 'fileutils'
     return result
   end
 
-  ## Returns array of processed recording call ids 
+  ## Returns array of processed recording call ids
   def recorded_ids
     dbfile = File.join('db','recorded_ids')
-    @recordedids ||= File.open(dbfile, 'r').readlines.map(&:chomp) 
+    @recordedids ||= File.open(dbfile, 'r').readlines.map(&:chomp)
   end
 
   ## Checks if procided callID has already had its recording processed
@@ -128,14 +128,14 @@ require 'fileutils'
     File.join(@conffile['cdrdir'], "#{call['start_time'].split(' ').first}.csv")
   end
 
-  ## Create cdr file if not exists 
+  ## Create cdr file if not exists
   def cdr_file(call)
     file_headers = "id,responsible_party,start_time,hangup_cause,calling_party,called_party,caller_id_number,caller_id_name,duration,bill_duration,direction,mailbox,aleg_holdtime,bleg_holdtime,recorded,tags\n"
     unless File.exists?(cdr_filename(call))
       File.open(cdr_filename(call), 'a') {|f| f.write(file_headers) }
     end
   end
-  
+
   ## Writes CDR to recording file
   def write_cdr(call)
     cdr_file(call)
@@ -148,20 +148,20 @@ require 'fileutils'
     file_ext = call["recording_key"].gsub('.enc','').split(".").last rescue ''
     file_str = "#{@conffile['destination_filename']}.#{file_ext}"
     output = file_str.gsub("{id}", call['id'])
-    output = output.gsub("{responsible_party}", call['responsible_party']) if call['responsible_party']
-    output = output.gsub("{start_time}", call['start_time'])
-    output = output.gsub("{hangup_cause}", call['hangup_cause']) if call['hangup_cause']
-    output = output.gsub("{calling_party}", call['calling_party']) if call['calling_party']
-    output = output.gsub("{called_party}", call['called_party']) if call['called_party']
-    output = output.gsub("{caller_id_number}", call['caller_id_number']) if call['caller_id_number']
-    output = output.gsub("{caller_id_name}", call['caller_id_name']) if call['caller_id_name']
-    output = output.gsub("{duration}", call['duration']) if call['duration']
-    output = output.gsub("{bill_duration}", call['bill_duration']) if call['bill_duration']
-    output = output.gsub("{direction}", call['direction']) if call['direction']
-    output = output.gsub("{mailbox}", call['mailbox']) if call['mailbox']
-    output = output.gsub("{aleg_holdtime}", call['aleg_holdtime']) if call['aleg_holdtime']
-    output = output.gsub("{bleg_holdtime}", call['bleg_holdtime']) if call['bleg_holdtime']
-    output = output.gsub("{tags}", call['tags'])
+    output = output.gsub("_{responsible_party}", call['responsible_party'] || 'responsible_party')
+    output = output.gsub("{start_time}", DateTime.parse(call['start_time']).strftime("%Y-%m-%d-%H-%M-%S") || 'start_time')
+    output = output.gsub("{hangup_cause}", call['hangup_cause'] || 'hangup_cause')
+    output = output.gsub("{calling_party}", call['calling_party'] || 'calling_party')
+    output = output.gsub("{called_party}", call['called_party'] || 'called_party')
+    output = output.gsub("{caller_id_number}", call['caller_id_number'] || 'caller_id_number')
+    output = output.gsub("{caller_id_name}", call['caller_id_name'] || 'caller_id_name')
+    output = output.gsub("{duration}", call['duration'] || 'duration')
+    output = output.gsub("{bill_duration}", call['bill_duration'] || 'bill_duration')
+    output = output.gsub("{direction}", call['direction'] || 'direction')
+    output = output.gsub("{mailbox}", call['mailbox'] || 'mailbox')
+    output = output.gsub("{aleg_holdtime}", call['aleg_holdtime'] || 'aleg_holdtime')
+    output = output.gsub("{bleg_holdtime}", call['bleg_holdtime'] || 'bleg_holdtime')
+    output = output.gsub("{tags}", call['tags'] || 'tags')
     output = output.gsub(' ', '_')
     $LOG.debug "Filename will be: #{output}"
     return output
