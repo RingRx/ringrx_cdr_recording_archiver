@@ -162,7 +162,7 @@ require 'fileutils'
     output = output.gsub("{aleg_holdtime}", call['aleg_holdtime'] || 'aleg_holdtime')
     output = output.gsub("{bleg_holdtime}", call['bleg_holdtime'] || 'bleg_holdtime')
     output = output.gsub("{tags}", call['tags'] || 'tags')
-    output = output.gsub(' ', '_')
+    output = output.gsub(' ', '_').gsub('*', '')
     $LOG.debug "Filename will be: #{output}"
     return output
   end
