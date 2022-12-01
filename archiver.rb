@@ -186,6 +186,9 @@ require 'fileutils'
     if recording_file.code == 200
       File.open(File.join(@conffile['destination_dir'], file_name(call)), 'wb') { |f| f.write(recording_file.body) }
       File.open(dbfile, 'a') { |f| f.write("#{call['id']}\n") }
+    elsif recording_file.code == 401
+      $LOG.debug "auth failed ending loop"
+      raise "Auth failed with #{recording_file.code} exiting"
     end
   end
 
@@ -199,6 +202,9 @@ auth_resp = auth
 if auth_resp.code == 200
   $LOG.debug "auth succeeded..setting auth token to #{auth_resp['access_token']}"
   @auth_token = auth_resp['access_token']
+else 
+  $LOG.debug "auth failed ending"
+  raise "Auth failed with #{auth_resp.code}"
 end
 
 if @auth_token
