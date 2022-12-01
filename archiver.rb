@@ -187,8 +187,22 @@ require 'fileutils'
       File.open(File.join(@conffile['destination_dir'], file_name(call)), 'wb') { |f| f.write(recording_file.body) }
       File.open(dbfile, 'a') { |f| f.write("#{call['id']}\n") }
     elsif recording_file.code == 401
-      $LOG.debug "auth failed ending loop"
-      raise "Auth failed with #{recording_file.code} exiting"
+      $LOG.debug "auth expired retrying"
+      auth_resp = auth
+      if auth_resp.code == 200
+        $LOG.debug "auth succeeded..setting auth token to #{auth_resp['access_token']}"
+        @auth_token = auth_resp['access_token']
+        recording_file = fetch_recording(call, @auth_token)
+        $LOG.warn "Retrieved #{recording_file.code}"
+        if recording_file.code == 200
+          File.open(File.join(@conffile['destination_dir'], file_name(call)), 'wb') { |f| f.write(recording_file.body) }
+          File.open(dbfile, 'a') { |f| f.write("#{call['id']}\n") }
+        else 
+          raise "Auth failed with #{recording_file.code} exiting"
+        end
+      else 
+        raise "Auth failed with #{recording_file.code} exiting"
+      end
     end
   end
 
@@ -224,6 +238,7 @@ if @auth_token
       save_recording(cdr, @auth_token)
     end
   end
+  $LOG.warn "Finished processing all CDRs"
 else
   $LOG.warn "Authentication failed unable to fetch messages"
   puts "no auth token..stopping"
