@@ -50,7 +50,7 @@ require 'fileutils'
 
     response = HTTParty.post("#{@conffile['portal_url']}/auth/token",
       body: body.to_json,
-      timeout: 10,
+      timeout: 120,
       headers: { 'Content-Type' => 'application/json' },
       verify: false )
     return response

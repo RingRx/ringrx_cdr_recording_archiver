@@ -7,7 +7,7 @@ acct_username: your_username
 acct_password: your_password
 portal_url: https://portal.ringrx.com
 # First run will sync this many days
-initial_sync_days: 180
+initial_sync_days: 30
 # Days to sync each pass
 sync_days: 10
 # Valid tokens for use in naming are
