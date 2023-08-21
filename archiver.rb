@@ -46,7 +46,11 @@ require 'fileutils'
   end
 
   def auth
-    body = { username: @conffile['acct_username'], password:  @conffile['acct_password'] }
+    if @conffile['api_token'] 
+      body = { token: @conffile['api_token'], secret:  @conffile['api_secret'] }
+    else 
+      body = { username: @conffile['acct_username'], password:  @conffile['acct_password'] }
+    end
 
     response = HTTParty.post("#{@conffile['portal_url']}/auth/token",
       body: body.to_json,

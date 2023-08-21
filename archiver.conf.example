@@ -3,6 +3,10 @@ cdrdir: cdrs
 destination_dir: calls
 logfilerotation: daily
 logfile: cdr_archiver.log
+##Uncomment if you plan to use api key auth
+#api_token: your generated api token
+#api_secret: the secret for your api token
+##comment out if using api key auth
 acct_username: your_username
 acct_password: your_password
 portal_url: https://portal.ringrx.com
